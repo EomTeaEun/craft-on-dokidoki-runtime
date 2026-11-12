@@ -6,7 +6,9 @@
 - 팀: DokiDokiRuntime
 - 팀원: 엄태은(팀장)
 - 공개 저장소: https://github.com/EomTeaEun/craft-on-dokidoki-runtime
-- 배포 및 릴리스: 최종 검증 후 이 문서에 기록
+- 플레이: https://dokidoki-runtime.vercel.app/
+- 다운로드: https://github.com/EomTeaEun/craft-on-dokidoki-runtime/releases/tag/v1.0.0
+- 검증한 운영 배포: `dpl_Gf8bE8n1SodN1V14D2nUvFzFnrFY`
 
 ## 원본과 제출판
 
@@ -67,3 +69,13 @@ vercel deploy --prod --skip-domain --scope eomteaeuns-projects
 - 무료 한도에 도달하면 서비스가 제한될 수 있으며, 이를 피하려고 자동으로 유료 플랜으로 올리지 않습니다. OpenAI API는 제작자가 설정한 별도 한도를 따릅니다.
 
 정책 참고: [Vercel Hobby](https://vercel.com/docs/plans/hobby), [Neon Free 한도](https://github.com/neondatabase/website/blob/main/content/faqs/free-plan-limits-and-quotas.md).
+
+## 운영 배포 검증
+
+- 운영 후보의 첫 화면 HTTP 200, `/api/status`의 OpenAI 연결 설정 확인
+- 동의 전 전송 차단, 동의 후 체험 대화 및 같은 요청의 저장 응답 재사용 확인
+- 운영 Secret으로 실제 OpenAI 답변 1회 수신
+- 관리자 로그인 뒤 해당 가상 플레이어의 두 대화 기록 조회 확인
+- 다른 익명 플레이어의 기록과 분리됨을 확인
+- 비로그인 관리자 조회 차단 확인
+- 검증용 두 플레이어 및 대화 기록 삭제 후 0건 확인, 관리자 로그아웃
