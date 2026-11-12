@@ -1,0 +1,22 @@
+{
+  "dependencies": {
+    "@ai-sdk/openai": "^4.0.96",
+    "@neondatabase/serverless": "^1.2.0",
+    "ai": "^7.0.143",
+    "zod": "^4.6.7"
+  },
+  "name": "love-exception",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "세 휴머노이드에게 사랑을 가르치는 로컬 비주얼 노벨",
+  "scripts": {
+    "start": "node server.mjs",
+    "dev": "node --watch server.mjs",
+    "test": "node --test test/*.test.js",
+    "check": "node scripts/check.mjs"
+  },
+  "engines": {
+    "node": ">=22.13"
+  }
+}

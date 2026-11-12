@@ -1,0 +1,39 @@
+import {test,after,before} from 'node:test';
+import assert from 'node:assert/strict';
+import {spawn} from 'node:child_process';
+import {setTimeout} from 'node:timers/promises';
+import {mkdtemp,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import path from 'node:path';
+import {randomUUID} from 'node:crypto';
+const port=3217,base=`http://127.0.0.1:${port}`;let child,dir,player,playerCookie,adminCookie,csrf;
+async function start(){child=spawn(process.execPath,['server.mjs'],{cwd:new URL('../',import.meta.url),env:{...process.env,PORT:String(port),OPENAI_API_KEY:'',GAME_DATA_DIR:dir,ADMIN_PASSWORD:'test-local-password'},stdio:'pipe'});let errors='';child.stderr.on('data',d=>errors+=d);for(let n=0;n<60;n++){if(child.exitCode!==null)throw Error('테스트 서버 실행 실패: '+errors);try{if((await fetch(base+'/api/status')).ok)return;}catch{}await setTimeout(100);}throw Error('서버 시작 시간 초과');}
+const post=(url,body,headers={})=>fetch(base+url,{method:'POST',headers:{'Content-Type':'application/json',...headers},body:JSON.stringify(body)});
+const cookie=r=>r.headers.getSetCookie().map(x=>x.split(';')[0]).join('; ');
+async function newPlayer(){const r=await fetch(base+'/api/player/session');return {cookie:cookie(r),session:await r.json()};}
+async function consent(p,accept=true){return post('/api/player/consent',{accept},{Cookie:p.cookie,'X-CSRF-Token':p.session.csrf});}
+const payload={mode:'demo',hero:'black',name:'테스터',stage:'meet',turn:0,score:30,text:'나는 아메리카노를 좋아해.',messages:[],memory:{facts:[],events:[],preferences:[],summary:''},dated:false,logging:{runId:randomUUID(),messageId:randomUUID(),storyRevision:3,episode:1,nodeId:'meet'}};
+const send=(value=payload,headers={})=>post('/api/chat',value,{Cookie:playerCookie,'X-CSRF-Token':player.csrf,...headers});
+const logs=async query=>(await fetch(base+'/api/admin/logs'+(query?'?'+query:''),{headers:{Cookie:adminCookie}})).json();
+before(async()=>{dir=await mkdtemp(path.join(tmpdir(),'vn-api-'));await start();const p=await newPlayer();player=p.session;playerCookie=p.cookie;await consent(p);const r=await post('/api/admin/login',{password:'test-local-password'});adminCookie=cookie(r);csrf=(await r.json()).csrf;});
+after(async()=>{if(child?.exitCode===null){child.kill();await new Promise(r=>child.once('exit',r));}await rm(dir,{recursive:true,force:true});});
+test('consent enforced on server; no transcript before consent',async()=>{const p=await newPlayer();const r=await send({...payload,logging:{...payload.logging,messageId:randomUUID()}},{Cookie:p.cookie,'X-CSRF-Token':p.session.csrf});assert.equal(r.status,403);assert.equal((await logs('player='+p.session.playerId)).total,0);const bad=await post('/api/player/consent',{accept:true},{Cookie:p.cookie});assert.equal(bad.status,403);});
+test('same send retry has one durable logical record and two attempts',async()=>{const [a,b]=await Promise.all([send(),send()]);assert.equal(a.status,200);assert.deepEqual(await a.json(),await b.json());const rows=(await logs('player='+player.playerId)).rows;assert.equal(rows.length,1);assert.equal(rows[0].attempts,2);assert.equal(rows[0].status,'succeeded');assert.equal(rows[0].response.memory_updates[0].value,'아메리카노');});
+test('same message ID with changed content is rejected without overwriting',async()=>{const r=await send({...payload,text:'changed'});assert.equal(r.status,409);assert.equal((await logs()).rows[0].prompt,payload.text);});
+test('rewind/resend at same turn and new runs retain separate messages',async()=>{const first={...payload,logging:{...payload.logging,messageId:randomUUID()}};const second={...payload,logging:{...payload.logging,runId:randomUUID(),messageId:randomUUID()}};assert.equal((await send(first)).status,200);assert.equal((await send(second)).status,200);const data=await logs('player='+player.playerId);assert.equal(data.total,3);assert.equal(new Set(data.rows.map(x=>x.run_id)).size,2);});
+test('identical nickname on another browser keeps a separate player',async()=>{const p=await newPlayer();await consent(p);const r=await send({...payload,logging:{...payload.logging,messageId:randomUUID()}},{Cookie:p.cookie,'X-CSRF-Token':p.session.csrf});assert.equal(r.status,200);const data=await logs('q='+encodeURIComponent('테스터'));assert.equal(data.players.length,2);assert.notEqual(data.players[0].player_id,data.players[1].player_id);});
+test('AI key failure is recorded and not silently converted into demo',async()=>{const r=await send({...payload,mode:'live',logging:{...payload.logging,messageId:randomUUID()}});assert.equal(r.status,503);assert.match((await r.json()).error,/키/);const data=await logs('status=failed');assert.equal(data.total,1);assert.equal(data.rows[0].mode,'live');});
+test('admin API requires auth and deletion requires CSRF',async()=>{assert.equal((await fetch(base+'/api/admin/logs')).status,401);const r=await fetch(base+'/api/admin/player?id='+player.playerId,{method:'DELETE',headers:{Cookie:adminCookie}});assert.equal(r.status,403);});
+test('private files, oversized input, cross origin and invalid metadata blocked',async()=>{assert.equal((await post('/api/chat',{})).status,400);assert.equal((await send(payload,{Origin:'https://example.com'})).status,403);for(const file of ['/.env.local','/server.mjs','/private-data/conversations.sqlite','/private-data/admin-auth.json'])assert.equal((await fetch(base+file)).status,404);assert.equal((await send({...payload,text:'x'.repeat(600000)})).status,413);});
+test('HTML-like user input is treated as text in JSON and admin renderer escapes it',async()=>{const prompt='<img src=x onerror=alert(1)>';const r=await send({...payload,text:prompt,logging:{...payload.logging,messageId:randomUUID()}});assert.equal(r.status,200);const data=await logs('q='+encodeURIComponent(prompt));assert.equal(data.rows[0].prompt,prompt);const source=await(await fetch(base+'/admin.js')).text();assert.ok(source.includes('${esc(m.prompt)}'));assert.ok(source.includes('${esc(m.response?.reply'));});
+test('database and sessions survive restart; retries still reuse stored response',async()=>{child.kill();await new Promise(r=>child.once('exit',r));await start();const result=await send();assert.equal(result.status,200);const data=await logs('player='+player.playerId);assert.ok(data.total>=3);assert.equal(data.rows.find(x=>x.message_id===payload.logging.messageId).attempts,3);});
+test('delete removes every run for a player and revokes their consent',async()=>{const r=await fetch(base+'/api/admin/player?id='+player.playerId,{method:'DELETE',headers:{Cookie:adminCookie,'X-CSRF-Token':csrf}});assert.equal(r.status,200);assert.equal((await logs('player='+player.playerId)).total,0);assert.equal((await send()).status,403);});
+test('static image, admin shell, and audio range still work',async()=>{assert.equal((await fetch(base+'/admin')).status,200);const img=await fetch(base+'/assets/standing-ocean/white.png',{method:'HEAD'});assert.equal(img.status,200);const r=await fetch(base+'/assets/opening.mp3',{headers:{Range:'bytes=0-99'}});assert.equal(r.status,206);assert.equal((await r.arrayBuffer()).byteLength,100);});
+
+test('complete local transcript larger than 64 KiB is accepted in offline demo, with a bounded message count',async()=>{
+ const p=await newPlayer();await consent(p);
+ const value={...payload,mode:'demo',messages:Array.from({length:80},(_,n)=>({role:n%2?'assistant':'user',content:'이전 대화 기록입니다. '.repeat(40)})),logging:{...payload.logging,runId:randomUUID(),messageId:randomUUID()}};
+ assert.ok(Buffer.byteLength(JSON.stringify(value))>65536);
+ const headers={Cookie:p.cookie,'X-CSRF-Token':p.session.csrf};const ok=await send(value,headers);assert.equal(ok.status,200);assert.match((await ok.json()).reply,/\([^()]+\)/);
+ assert.equal((await send({...value,messages:Array.from({length:97},()=>({role:'user',content:'과다 기록'})),logging:{...value.logging,messageId:randomUUID()}},headers)).status,400);
+});

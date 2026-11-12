@@ -1,0 +1,10 @@
+.git
+.env
+.env.*
+!.env.example
+private-data
+node_modules
+test
+docs
+release
+게임 실행.command
