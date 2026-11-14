@@ -1,8 +1,14 @@
 <div align="center">
 
-<img src="public/assets/cover-wide-16x9.png" alt="코딩만 하려던 나에게… 연애 플래그를 세우지 마세요, 에이전트님!" width="100%" />
+<img src="public/assets/cover-wide-16x9.png" alt="코딩만 하려던 나에게 연애 플래그를 세우지 마세요 에이전트님!" width="100%" />
 
-# 연애 플래그는 예외 처리되지 않습니다
+# 코딩만 하려던 나에게 연애 플래그를 세우지 마세요 에이전트님!
+
+**부제 · 연애플래그는 예외처리 되지 않습니다**
+
+## [▶ 웹에서 바로 플레이](https://dokidoki-runtime.vercel.app/)
+
+설치 없이 브라우저에서 시작할 수 있습니다.
 
 **사랑을 가르치라는 과제. 그런데, 배우고 있는 건 누구일까?**
 
@@ -13,7 +19,7 @@
 ![플랫폼](https://img.shields.io/badge/PLATFORM-Web-c3b5da?style=flat-square)
 ![AI](https://img.shields.io/badge/DIALOGUE-OpenAI-9fcdbd?style=flat-square)
 
-**[웹에서 바로 플레이](https://dokidoki-runtime.vercel.app/)** · [게임 다운로드](https://github.com/EomTeaEun/craft-on-dokidoki-runtime/releases/tag/v1.0.0) · [조작법](#조작법)
+[게임 다운로드](https://github.com/EomTeaEun/craft-on-dokidoki-runtime/releases/tag/v1.0.0) · [조작법](#조작법)
 
 </div>
 
